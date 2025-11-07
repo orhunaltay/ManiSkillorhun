@@ -1,0 +1,18 @@
+# Core dependencies for running pick_banana_from_open_drawer tasks
+# Install with: pip install -r requirements_banana_task.txt
+
+gymnasium==0.29.1
+numpy>=1.22
+scipy
+transforms3d
+trimesh
+imageio
+imageio[ffmpeg]
+pyyaml
+tqdm
+h5py
+tabulate
+pytorch_kinematics==0.7.6
+
+# Note: SAPIEN must be installed separately for Mac
+# See SETUP_INSTRUCTIONS.md for details

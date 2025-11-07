@@ -152,14 +152,6 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             device=self.device,
         )
 
-        # Store the drawer joint index for later use
-        # Find which joint index corresponds to the drawer (prismatic joint)
-        self.drawer_joint_idx = None
-        for i, joint in enumerate(self.cabinet.joints):
-            if joint.type[0] == "prismatic":
-                self.drawer_joint_idx = i
-                break
-
     def _after_reconfigure(self, options):
         """Setup after GPU initialization"""
         self.cabinet_zs = []
@@ -167,6 +159,14 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             collision_mesh = cabinet.get_first_collision_mesh()
             self.cabinet_zs.append(-collision_mesh.bounding_box.bounds[0, 2])
         self.cabinet_zs = common.to_tensor(self.cabinet_zs, device=self.device)
+
+        # Find the drawer joint index - needs to be done after reconfigure when joints are available
+        # Look for the prismatic joint (drawer slides in/out)
+        self.drawer_joint_idx = None
+        for i, joint in enumerate(self._cabinets[0].joints):
+            if joint.type[0] == "prismatic":
+                self.drawer_joint_idx = i
+                break
 
         # Get drawer joint limits
         target_qlimits = self.handle_link.joint.limits  # [b, 1, 2]

@@ -104,8 +104,11 @@ def main():
 
     # Debug: wait a moment to see initial state
     for _ in range(10):
-        env.step(np.array([0, 0, 0, OPEN_CMD], dtype=np.float32))
-        env.render()
+        obs, _, _, _, _ = env.step(np.array([0, 0, 0, OPEN_CMD], dtype=np.float32))
+        try:
+            env.render()
+        except (AttributeError, Exception):
+            pass
         time.sleep(dt)
 
     print(f"After stabilization:")
@@ -218,7 +221,11 @@ def main():
                 act = np.array([0, 0, 0, 0], np.float32)
                 obs, _, _, _, _ = env.step(act)
 
-            env.render()
+            try:
+                env.render()
+            except (AttributeError, Exception) as e:
+                # Viewer might crash on Mac, continue without rendering
+                pass
             time.sleep(dt)
 
     except KeyboardInterrupt:

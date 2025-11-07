@@ -174,6 +174,15 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             xy[:, 2] = self.cabinet_zs[env_idx]
             self.cabinet.set_pose(Pose.create_from_pq(p=xy))
 
+            # Lock the cabinet root so it can't be pushed around
+            # Set very high mass for the root link to make it unmovable
+            for cabinet in self._cabinets:
+                # Make root link very heavy (1000kg)
+                root_link = cabinet.get_links()[0]  # Get root link
+                root_link.set_mass(1000.0)
+                root_link.set_linear_velocity([0, 0, 0])
+                root_link.set_angular_velocity([0, 0, 0])
+
             # Open the drawer to the target position
             # Get joint limits [b, num_joints, 2] where [:,:,0] is min and [:,:,1] is max
             qlimits = self.cabinet.get_qlimits()
@@ -199,7 +208,7 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             banana_pos = torch.zeros((b, 3))
             banana_pos[:, 0] = 0.05   # In front, inside drawer
             banana_pos[:, 1] = 0.25   # Same Y as cabinet
-            banana_pos[:, 2] = 0.06   # On drawer bottom, slightly elevated
+            banana_pos[:, 2] = 0.08   # On drawer bottom, elevated (will settle to ~0.06)
             q = [1, 0, 0, 0]
             self.banana.set_pose(Pose.create_from_pq(p=banana_pos, q=q))
 

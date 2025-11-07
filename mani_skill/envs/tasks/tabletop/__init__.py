@@ -27,6 +27,7 @@ from .pick_cube_v3_vsphere import PickCubeV3VisibleSphereEnv
 from .place_sphere_v2 import PlaceSphereV2Env
 from .place_sphere_v3 import PlaceSphereV3Env
 from .pick_cube_MP_v1 import PickCubeMPEnv
+from .pick_banana_from_open_drawer import PickBananaFromOpenDrawerEnv  # new
 from .plug_charger_v2 import PlugChargerV2Env             # new
 from .pull_cube_v2 import PullCubeV2Env                   # new
 from .push_cube_v2 import PushCubeV2Env                   # new

@@ -102,6 +102,18 @@ def main():
     print(f"Initial TCP position: {tcp()}")
     print("=" * 80)
 
+    # Debug: wait a moment to see initial state
+    for _ in range(10):
+        env.step(np.array([0, 0, 0, OPEN_CMD], dtype=np.float32))
+        env.render()
+        time.sleep(dt)
+
+    print(f"After stabilization:")
+    print(f"  Banana: {banana()}")
+    print(f"  TCP: {tcp()}")
+    print(f"  Distance: {np.linalg.norm(tcp() - banana()):.3f}m")
+    print("=" * 80)
+
     try:
         while True:
             cur = tcp()
@@ -110,6 +122,22 @@ def main():
                 # Move above banana in drawer
                 target = np.array([banana()[0], banana()[1], HOVER_Z], np.float32)
                 obs, _, _, _ = step_towards(env, cur, target, OPEN_CMD)
+
+                # Debug: print progress every 100 steps
+                if hasattr(main, 'step_count'):
+                    main.step_count += 1
+                else:
+                    main.step_count = 0
+                    print(f"State: {state}")
+                    print(f"  Current TCP: {cur}")
+                    print(f"  Banana pos: {banana()}")
+                    print(f"  Target: {target}")
+                    print(f"  Distance XY: {np.linalg.norm(cur[:2] - target[:2]):.3f}m")
+                    print(f"  Distance Z: {abs(cur[2] - target[2]):.3f}m")
+
+                if main.step_count >= 100:
+                    main.step_count = 0
+
                 if np.linalg.norm(cur[:2] - target[:2]) < XY_TOL and abs(cur[2] - target[2]) < Z_TOL:
                     print(f"✓ Reached above banana at {cur}")
                     state = "descend_to_grasp"

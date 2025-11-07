@@ -10,41 +10,53 @@ from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.building import actors
 from mani_skill.utils.scene_builder.table import TableSceneBuilder
 from mani_skill.agents.robots import Panda, Fetch
-from transforms3d.euler import euler2quat
+from mani_skill.utils.building.actor_builder import ActorBuilder
+import sapien.render
 
 
-@register_env("LightBulbInSocket-v1", max_episode_steps=100000)
+@register_env("LightBulbInSocket-v1", max_episode_steps=100)
 class LightBulbInSocketEnv(BaseEnv):
-    """Goal: grasp the lightbulb and insert it into the socket fixture."""
+    """Goal: grasp the lightbulb and insert it into the socket fixture.
+
+    The lightbulb has a bulbous glass top and a threaded metal base.
+    The socket is a fixture that accepts the bulb base.
+    """
 
     SUPPORTED_ROBOTS = ["panda", "fetch"]
     agent: Union[Panda, Fetch]
 
-    # success threshold (meters and radians)
-    socket_radius = 0.025    # socket hole radius ~2.5cm
-    insertion_depth = 0.04   # how deep the bulb base needs to be in socket
-    position_tol = 0.015     # position tolerance for alignment
-    rotation_tol = 0.2       # rotation tolerance (radians) ~11 degrees
+    # Lightbulb dimensions (standard E26/E27 bulb proportions)
+    bulb_radius = 0.03          # Glass bulb sphere radius
+    base_radius = 0.013         # Metal base radius (E26 ~26mm)
+    base_height = 0.027         # Metal base height
+    total_height = 0.10         # Total lightbulb height
+
+    # Socket dimensions
+    socket_hole_radius = 0.015  # Slightly larger than base for insertion
+    socket_depth = 0.04         # How deep the socket is
+
+    # Success thresholds
+    insertion_threshold = 0.025  # How deep bulb must be inserted (meters)
+    xy_threshold = 0.02          # XY alignment tolerance (meters)
 
     @property
     def _default_human_render_camera_configs(self):
-        # A good 3/4 view of the table + arm
         pose = sapien_utils.look_at(eye=[0.6, 0.7, 0.6], target=[0.0, 0.0, 0.35])
-        return [
-            CameraConfig(
-                "viewer_cam",
-                pose=pose,
-                width=960,
-                height=720,
-                fov=np.pi / 3,
-                near=0.01,
-                far=100.0,
-            )
-        ]
+        return CameraConfig(
+            "render_camera",
+            pose=pose,
+            width=960,
+            height=720,
+            fov=np.pi / 3,
+            near=0.01,
+            far=100.0,
+        )
 
     def __init__(self, *args, robot_uids="panda",
                  num_envs=1, reconfiguration_freq=None,
+                 robot_init_qpos_noise=0.02,
                  **kwargs):
+        self.robot_init_qpos_noise = robot_init_qpos_noise
         if reconfiguration_freq is None:
             reconfiguration_freq = 1 if num_envs == 1 else 0
 
@@ -55,191 +67,245 @@ class LightBulbInSocketEnv(BaseEnv):
                          **kwargs)
 
     def _load_agent(self, options: dict):
-        super()._load_agent(options, sapien.Pose(p=[0, 0, 1.0]))
+        super()._load_agent(options, sapien.Pose(p=[-0.615, 0, 0]))
 
     def _load_scene(self, options: dict):
-        # Create floor + table
-        self.table_scene = TableSceneBuilder(env=self)
+        # Create table
+        self.table_scene = TableSceneBuilder(
+            env=self, robot_init_qpos_noise=self.robot_init_qpos_noise
+        )
         self.table_scene.build()
 
-        # Build lightbulb (sphere bulb + cylindrical base)
-        # The lightbulb is composed of two parts for visual/collision
+        # Build lightbulb - SIMPLIFIED for better physics and grasping
         bulb_builder = self.scene.create_actor_builder()
 
-        # Glass bulb part (sphere)
-        bulb_builder.add_sphere_collision(radius=0.03)
+        # Simple collision: capsule for the whole lightbulb (easier to grasp)
+        # Capsule oriented vertically (along Z axis)
+        bulb_builder.add_capsule_collision(
+            radius=self.base_radius,
+            half_length=self.total_height / 2,
+            density=300,  # Light enough to pick up easily
+        )
+
+        # Visual: Glass bulb (sphere at top)
         bulb_builder.add_sphere_visual(
-            radius=0.03,
+            radius=self.bulb_radius,
+            pose=sapien.Pose(p=[0, 0, self.total_height/2 - self.bulb_radius/2]),
             material=sapien.render.RenderMaterial(
-                base_color=[1.0, 0.95, 0.8, 0.7],  # warm white, semi-transparent
-                metallic=0.1,
-                roughness=0.2,
+                base_color=[1.0, 0.98, 0.85, 0.85],  # Warm white glass
+                metallic=0.0,
+                roughness=0.1,
+                transmission=0.7,  # Glass-like transparency
             )
         )
 
-        # Metal base/screw part (cylinder)
-        bulb_builder.add_cylinder_collision(
-            radius=0.015,
-            half_length=0.025,
-            pose=sapien.Pose(p=[0, 0, -0.055])  # below the bulb sphere
-        )
+        # Visual: Metal base (cylinder at bottom)
         bulb_builder.add_cylinder_visual(
-            radius=0.015,
-            half_length=0.025,
+            radius=self.base_radius,
+            half_length=self.base_height/2,
+            pose=sapien.Pose(p=[0, 0, -self.total_height/2 + self.base_height/2]),
             material=sapien.render.RenderMaterial(
-                base_color=[0.8, 0.8, 0.8, 1.0],  # metallic silver
-                metallic=0.9,
+                base_color=[0.75, 0.75, 0.75, 1.0],  # Silver metal
+                metallic=0.95,
                 roughness=0.3,
-            ),
-            pose=sapien.Pose(p=[0, 0, -0.055])
+            )
+        )
+
+        # Neck connecting bulb and base
+        bulb_builder.add_cylinder_visual(
+            radius=self.base_radius * 0.7,
+            half_length=(self.total_height - self.bulb_radius - self.base_height)/2,
+            pose=sapien.Pose(p=[0, 0, 0]),
+            material=sapien.render.RenderMaterial(
+                base_color=[0.85, 0.85, 0.85, 0.9],
+                metallic=0.3,
+                roughness=0.4,
+            )
         )
 
         bulb_builder.initial_pose = sapien.Pose(p=[0.0, 0.0, 0.60])
         self.lightbulb = bulb_builder.build(name="lightbulb")
 
-        # Build socket fixture (static, mounted on a stand)
-        # Socket is a vertical cylinder with a hole to insert the bulb
+        # Build socket - SIMPLIFIED
         socket_builder = self.scene.create_actor_builder()
 
-        # Socket body - hollow cylinder (we'll use box collision for simplicity)
-        # Outer wall
-        socket_height = 0.08
-        socket_outer_radius = 0.04
-        socket_inner_radius = 0.018  # slightly larger than bulb base
-
-        # Create socket as a compound shape
-        # Base platform
-        socket_builder.add_cylinder_collision(
-            radius=0.06,
-            half_length=0.01,
-            pose=sapien.Pose(p=[0, 0, -socket_height/2 - 0.01])
+        # Base platform (cube)
+        platform_size = 0.08
+        socket_builder.add_box_collision(
+            half_size=[platform_size/2, platform_size/2, 0.01],
+            pose=sapien.Pose(p=[0, 0, -0.01])
         )
-        socket_builder.add_cylinder_visual(
-            radius=0.06,
-            half_length=0.01,
+        socket_builder.add_box_visual(
+            half_size=[platform_size/2, platform_size/2, 0.01],
+            pose=sapien.Pose(p=[0, 0, -0.01]),
             material=sapien.render.RenderMaterial(
-                base_color=[0.2, 0.2, 0.2, 1.0],  # dark gray
-                metallic=0.5,
-                roughness=0.7,
-            ),
-            pose=sapien.Pose(p=[0, 0, -socket_height/2 - 0.01])
+                base_color=[0.15, 0.15, 0.15, 1.0],
+                metallic=0.7,
+                roughness=0.6,
+            )
         )
 
-        # Socket cylinder (visual only, collision would block insertion)
+        # Socket body - cylinder with hole in middle
+        socket_outer_radius = 0.035
+        socket_height = self.socket_depth
+
+        # Visual: outer cylinder
         socket_builder.add_cylinder_visual(
             radius=socket_outer_radius,
             half_length=socket_height/2,
+            pose=sapien.Pose(p=[0, 0, socket_height/2]),
             material=sapien.render.RenderMaterial(
-                base_color=[0.3, 0.3, 0.3, 1.0],
-                metallic=0.6,
-                roughness=0.6,
-            ),
+                base_color=[0.25, 0.25, 0.25, 1.0],
+                metallic=0.8,
+                roughness=0.5,
+            )
         )
 
-        # Add collision walls around the socket (not in the center hole)
-        # We'll add 4 box collisions around the perimeter to create a hollow center
-        wall_thickness = 0.015
-        for i in range(4):
-            angle = i * np.pi / 2
-            offset_x = (socket_outer_radius - wall_thickness/2) * np.cos(angle)
-            offset_y = (socket_outer_radius - wall_thickness/2) * np.sin(angle)
+        # Collision: ring of boxes around the outside (leaving center open for insertion)
+        # Create 8 thin walls in a circle
+        num_walls = 8
+        wall_thickness = 0.008
+        for i in range(num_walls):
+            angle = i * 2 * np.pi / num_walls
+            wall_dist = (socket_outer_radius + self.socket_hole_radius) / 2
+            x = wall_dist * np.cos(angle)
+            y = wall_dist * np.sin(angle)
+
+            # Rotation for radial wall
+            from scipy.spatial.transform import Rotation
+            rot = Rotation.from_euler('z', angle, degrees=False)
+            quat = rot.as_quat()  # [x, y, z, w]
+            quat_sapien = [quat[3], quat[0], quat[1], quat[2]]  # sapien uses [w, x, y, z]
+
             socket_builder.add_box_collision(
-                half_size=[wall_thickness/2, socket_outer_radius, socket_height/2],
-                pose=sapien.Pose(p=[offset_x, offset_y, 0], q=euler2quat(0, 0, angle))
+                half_size=[wall_thickness/2, (socket_outer_radius - self.socket_hole_radius)/2, socket_height/2],
+                pose=sapien.Pose(p=[x, y, socket_height/2], q=quat_sapien)
             )
 
-        socket_builder.initial_pose = sapien.Pose(p=[0.25, 0.0, 0.15])
+        socket_builder.initial_pose = sapien.Pose(p=[0.25, 0.0, 0.02])
         self.socket = socket_builder.build_static(name="socket")
+
+        # Goal visualization (invisible marker at insertion target)
+        self.goal_site = actors.build_sphere(
+            self.scene,
+            radius=0.01,
+            color=[0, 1, 0, 0.5],
+            name="goal_site",
+            body_type="kinematic",
+            add_collision=False,
+            initial_pose=sapien.Pose(),
+        )
+        self._hidden_objects.append(self.goal_site)
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):
             b = len(env_idx)
             self.table_scene.initialize(env_idx)
 
-            # Randomize socket position slightly
-            socket_xy = (torch.rand((b, 2)) - 0.5) * 0.10  # ±5 cm on table
-            socket_z = torch.full((b, 1), 0.15)  # 15cm above table surface
+            # Randomize socket position on table
+            socket_xy = (torch.rand((b, 2)) - 0.5) * 0.10  # ±5 cm
+            socket_z = torch.full((b, 1), 0.02)  # Just above table
             socket_p = torch.cat([socket_xy, socket_z], dim=-1)
-            # Socket is vertical (no rotation)
             q = [1, 0, 0, 0]
             self.socket.set_pose(Pose.create_from_pq(p=socket_p, q=q))
 
             # Randomize lightbulb position on table
+            # Make sure it's standing upright
             bulb_xy = (torch.rand((b, 2)) - 0.5) * 0.20  # ±10 cm
-            bulb_z = torch.full((b, 1), 0.08)  # on table surface
+            # Height: half the total height above table to rest it properly
+            bulb_z = torch.full((b, 1), self.total_height / 2)
             bulb_p = torch.cat([bulb_xy, bulb_z], dim=-1)
-            # Random rotation around Z axis (upright)
-            angles = torch.rand((b,)) * 2 * np.pi
-            bulb_q = torch.zeros((b, 4))
-            bulb_q[:, 0] = torch.cos(angles / 2)  # w
-            bulb_q[:, 3] = torch.sin(angles / 2)  # z
-            self.lightbulb.set_pose(Pose.create_from_pq(p=bulb_p, q=bulb_q))
+            # Upright orientation (no rotation)
+            self.lightbulb.set_pose(Pose.create_from_pq(p=bulb_p, q=q))
+
+            # Set goal visualization at socket top center
+            goal_p = socket_p.clone()
+            goal_p[:, 2] += self.socket_depth
+            self.goal_site.set_pose(Pose.create_from_pq(goal_p))
 
     def evaluate(self):
-        # Check if bulb base is aligned with socket opening and inserted
+        # Get bulb base position (bottom of lightbulb)
         bulb_pos = self.lightbulb.pose.p
+        bulb_base_z = bulb_pos[..., 2] - self.total_height / 2
+
+        # Get socket top position
         socket_pos = self.socket.pose.p
+        socket_top_z = socket_pos[..., 2] + self.socket_depth
 
-        # XY alignment (bulb centered over socket)
+        # Check XY alignment
         xy_dist = torch.linalg.norm(bulb_pos[..., :2] - socket_pos[..., :2], dim=1)
-        xy_aligned = xy_dist < self.position_tol
+        xy_aligned = xy_dist < self.xy_threshold
 
-        # Z alignment (bulb inserted into socket)
-        # Bulb base should be at or below socket top
-        bulb_base_z = bulb_pos[..., 2] - 0.055  # subtract bulb base offset
-        socket_top_z = socket_pos[..., 2] + 0.04  # socket top
-        z_inserted = (socket_top_z - bulb_base_z) > self.insertion_depth * 0.5
+        # Check insertion depth (bulb base should be below socket top)
+        insertion_depth = socket_top_z - bulb_base_z
+        inserted = insertion_depth > self.insertion_threshold
 
-        # Orientation check (bulb should be roughly vertical/upright)
-        # Check z-component of up vector (should be close to 1 for upright)
-        bulb_rot_mat = self.lightbulb.pose.to_transformation_matrix()
-        z_axis = bulb_rot_mat[..., :3, 2]  # z column of rotation matrix
-        upright = torch.abs(z_axis[..., 2]) > torch.cos(torch.tensor(self.rotation_tol))
+        # Check if being grasped (for intermediate reward)
+        is_grasped = self.agent.is_grasping(self.lightbulb)
 
-        success = xy_aligned & z_inserted & upright
+        # Check if robot is static
+        is_robot_static = self.agent.is_static(0.2)
+
+        success = xy_aligned & inserted & is_robot_static
 
         return {
             "success": success,
             "xy_aligned": xy_aligned,
-            "z_inserted": z_inserted,
-            "upright": upright,
+            "inserted": inserted,
+            "is_grasped": is_grasped,
+            "is_robot_static": is_robot_static,
+            "insertion_depth": insertion_depth,
         }
 
     def _get_obs_extra(self, info: Dict):
         obs = dict(
             tcp_pose=self.agent.tcp.pose.raw_pose,
+            is_grasped=info["is_grasped"],
         )
-        if self.obs_mode_struct.use_state:
+        if "state" in self.obs_mode:
             obs.update(
                 lightbulb_pose=self.lightbulb.pose.raw_pose,
                 socket_pose=self.socket.pose.raw_pose,
+                tcp_to_bulb_pos=self.lightbulb.pose.p - self.agent.tcp.pose.p,
+                bulb_to_socket_pos=self.socket.pose.p - self.lightbulb.pose.p,
             )
         return obs
 
-    def compute_normalized_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
-        # Reward for approaching bulb, grasping, moving to socket, and inserting
-        tcp_pos = self.agent.tcp.pose.p
-        bulb_pos = self.lightbulb.pose.p
-        socket_pos = self.socket.pose.p
+    def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
+        # Stage 1: Reach the lightbulb
+        tcp_to_bulb_dist = torch.linalg.norm(
+            self.lightbulb.pose.p - self.agent.tcp.pose.p, axis=1
+        )
+        reaching_reward = 1 - torch.tanh(5 * tcp_to_bulb_dist)
+        reward = reaching_reward
 
-        # Stage 1: Reach bulb
-        tcp_to_bulb = torch.linalg.norm(tcp_pos - bulb_pos, dim=1)
-        reach_reward = -2.0 * tcp_to_bulb
+        # Stage 2: Grasp the bulb
+        is_grasped = info["is_grasped"]
+        reward = reward + is_grasped
 
-        # Stage 2: Move bulb to socket
-        bulb_to_socket_xy = torch.linalg.norm(bulb_pos[..., :2] - socket_pos[..., :2], dim=1)
-        approach_reward = -3.0 * bulb_to_socket_xy
+        # Stage 3: Move bulb to socket
+        bulb_to_socket_dist = torch.linalg.norm(
+            self.socket.pose.p - self.lightbulb.pose.p, axis=1
+        )
+        transport_reward = 1 - torch.tanh(5 * bulb_to_socket_dist)
+        reward = reward + transport_reward * is_grasped
 
-        # Stage 3: Insert bulb (vertical alignment)
-        bulb_base_z = bulb_pos[..., 2] - 0.055
-        socket_top_z = socket_pos[..., 2] + 0.04
-        insertion_depth_current = socket_top_z - bulb_base_z
-        insertion_reward = 2.0 * torch.clamp(insertion_depth_current / self.insertion_depth, 0, 1)
+        # Stage 4: Insert bulb
+        reward = reward + info["inserted"].float() * is_grasped
 
-        # Bonus for success
-        success_bonus = 5.0 * info["success"].float()
+        # Stage 5: Static (task complete)
+        qvel = self.agent.robot.get_qvel()
+        if self.robot_uids in ["panda"]:
+            qvel = qvel[..., :-2]
+        static_reward = 1 - torch.tanh(5 * torch.linalg.norm(qvel, axis=1))
+        reward = reward + static_reward * info["inserted"].float()
 
-        total_reward = reach_reward + approach_reward + insertion_reward + success_bonus
+        # Success bonus
+        reward[info["success"]] = 6
 
-        # Normalize to roughly [-1, 1] range
-        return torch.clamp(total_reward / 10.0, -1.0, 1.0)
+        return reward
+
+    def compute_normalized_dense_reward(
+        self, obs: Any, action: torch.Tensor, info: Dict
+    ):
+        return self.compute_dense_reward(obs=obs, action=action, info=info) / 6

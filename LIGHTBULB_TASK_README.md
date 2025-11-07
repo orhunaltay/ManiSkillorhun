@@ -27,41 +27,49 @@ This task demonstrates:
 
 1. **lightbulb_in_socket.py** - Environment definition
    - Defines the `LightBulbInSocket-v1` task
-   - Creates lightbulb geometry (glass sphere + metal base)
-   - Creates socket fixture (hollow cylinder on a stand)
-   - Implements success criteria and reward function
+   - Creates realistic lightbulb geometry (bulbous glass top + metal base + neck)
+   - Creates socket fixture with hollow center for insertion
+   - Implements success criteria and dense reward function
 
 2. **lightbulb_motion_planning.py** - Motion planning script
    - Demonstrates how to solve the task with scripted motion planning
-   - Implements a state machine for: approach → grasp → lift → align → insert → retreat
+   - Implements an 8-state machine: move_above_bulb → descend_to_grasp → close_gripper → lift_bulb → move_above_socket → align_with_socket → lower_to_socket → insert_bulb → settle → open_gripper → retreat → done
+   - Uses controlled, small steps (8mm) for precise manipulation
+
+3. **INSTALLATION.md** - Setup instructions for all platforms
 
 ## Task Description
 
 ### Objects
 
-**Lightbulb**:
-- Glass bulb: 3cm radius sphere (semi-transparent, warm white)
-- Metal base: 1.5cm radius, 5cm tall cylinder
-- Total height: ~8cm
-- Dynamic object (can be picked up)
+**Lightbulb** (Realistic E26/E27 Standard Bulb):
+- **Glass bulb**: 3cm radius sphere at top (semi-transparent, warm white glow)
+- **Metal base**: 1.3cm radius threaded cylinder at bottom (silver, metallic)
+- **Neck**: Narrow connecting cylinder (glass/frosted appearance)
+- **Total height**: 10cm
+- **Collision**: Simple capsule (easier to grasp and manipulate)
+- **Mass**: Light (density=300) - easy for robot to pick up
+- **Dynamic object** (can be picked up and moved)
 
 **Socket Fixture**:
-- Hollow cylinder: 4cm outer radius, 1.8cm inner radius
-- Height: 8cm
-- Mounted on a base platform (6cm radius)
-- Static object (fixed in place)
+- **Base platform**: 8cm square dark base (collision + visual)
+- **Socket body**: 3.5cm outer radius cylinder (dark gray, metallic)
+- **Socket hole**: 1.5cm radius opening for bulb insertion
+- **Depth**: 4cm deep socket
+- **Collision**: Ring of 8 thin walls (leaves center open for insertion)
+- **Static object** (fixed in place on table)
 
 ### Success Conditions
 
-The task is successful when:
-1. **XY Alignment**: Bulb center is within 1.5cm of socket center
-2. **Insertion Depth**: Bulb base is inserted at least 2cm into socket
-3. **Orientation**: Bulb is upright (within ~11° of vertical)
+The task is successful when ALL of these are met:
+1. **XY Alignment**: Bulb center within 2cm of socket center
+2. **Insertion Depth**: Bulb base inserted at least 2.5cm deep
+3. **Robot Static**: Robot joints have low velocity (<0.2)
 
 ### Randomization
 
-- **Lightbulb**: Spawns at random XY position on table (±10cm), random Z rotation
-- **Socket**: Spawns at random XY position (±5cm), 15cm above table, always vertical
+- **Lightbulb**: Spawns at random XY position on table (±10cm), always upright
+- **Socket**: Spawns at random XY position (±5cm), 2cm above table, always vertical
 
 ## Usage
 

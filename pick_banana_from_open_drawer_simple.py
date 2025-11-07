@@ -177,11 +177,9 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             # Lock the cabinet root so it can't be pushed around
             # Set very high mass for the root link to make it unmovable
             for cabinet in self._cabinets:
-                # Make root link very heavy (1000kg)
+                # Make root link very heavy (10000kg) to prevent pushing
                 root_link = cabinet.get_links()[0]  # Get root link
-                root_link.set_mass(1000.0)
-                root_link.set_linear_velocity([0, 0, 0])
-                root_link.set_angular_velocity([0, 0, 0])
+                root_link.set_mass(10000.0)
 
             # Open the drawer to the target position
             # Get joint limits [b, num_joints, 2] where [:,:,0] is min and [:,:,1] is max

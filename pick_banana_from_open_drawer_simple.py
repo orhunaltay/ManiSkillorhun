@@ -168,27 +168,11 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             # Initialize table scene with default robot pose
             self.table_scene.initialize(env_idx)
 
-            # Set robot to a good starting pose closer to the banana
-            # qpos for panda: 7 arm joints + 2 gripper joints
-            qpos_0 = torch.tensor([
-                [0.0,      # Joint 1
-                 -0.785,   # Joint 2 (slight down angle)
-                 0.0,      # Joint 3
-                 -2.356,   # Joint 4 (elbow bent)
-                 0.0,      # Joint 5
-                 1.571,    # Joint 6 (wrist up)
-                 0.785,    # Joint 7 (wrist rotate)
-                 0.04,     # Gripper finger 1 (open)
-                 0.04]     # Gripper finger 2 (open)
-            ], device=self.device, dtype=torch.float32).repeat(b, 1)
-            self.agent.robot.set_qpos(qpos_0)
-            self.agent.robot.set_qvel(qpos_0 * 0)
-
-            # Position cabinet on table (fixed position for scripted execution)
-            # Cabinet placed on the side of the table for easy access
+            # Position cabinet closer to robot's natural reach
+            # Default robot TCP is around [-0.3, 0.0, 0.5] so place objects there
             xy = torch.zeros((b, 3))
-            xy[:, 0] = 0.10  # 10cm from robot
-            xy[:, 1] = 0.25  # To the side
+            xy[:, 0] = -0.15  # In front of robot (negative X)
+            xy[:, 1] = 0.05   # Centered
             xy[:, 2] = self.cabinet_zs[env_idx]
             self.cabinet.set_pose(Pose.create_from_pq(p=xy))
 
@@ -220,20 +204,20 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
                 self.scene._gpu_fetch_all()
 
             # Place banana inside the drawer (fixed position for scripted execution)
-            # Banana position relative to cabinet
+            # Position relative to where robot naturally reaches
             banana_pos = torch.zeros((b, 3))
-            banana_pos[:, 0] = 0.05   # In front, inside drawer
-            banana_pos[:, 1] = 0.25   # Same Y as cabinet
+            banana_pos[:, 0] = -0.20  # In front of robot
+            banana_pos[:, 1] = 0.05   # Centered with cabinet
             banana_pos[:, 2] = 0.08   # On drawer bottom, elevated (will settle to ~0.06)
             q = [1, 0, 0, 0]
             self.banana.set_pose(Pose.create_from_pq(p=banana_pos, q=q))
 
             # Set goal position (fixed for scripted execution)
-            # Goal position: on the table, away from drawer
+            # Goal position: to the side, reachable
             goal_pos = torch.zeros((b, 3))
-            goal_pos[:, 0] = 0.10    # Same X as cabinet
-            goal_pos[:, 1] = -0.20   # Opposite side of table
-            goal_pos[:, 2] = 0.10    # On table surface
+            goal_pos[:, 0] = -0.15   # Same X depth
+            goal_pos[:, 1] = -0.25   # Opposite side
+            goal_pos[:, 2] = 0.15    # Elevated
             self.goal_site.set_pose(Pose.create_from_pq(p=goal_pos, q=q))
 
     def _after_control_step(self):

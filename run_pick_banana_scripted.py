@@ -29,13 +29,13 @@ from gymnasium.wrappers import ClipAction, RescaleAction
 HOVER_Z = 0.25   # hover height above table (z=0)
 GRASP_Z = 0.06   # touch banana height (matches spawn in drawer)
 PLACE_Z = 0.10   # place height at goal (matches goal z)
-STEP_XYZ = 0.01  # 1 cm per step
+STEP_XYZ = 0.03  # 3 cm per step (increased for faster movement)
 FPS = 60.0
 HOLD_STEPS = 30
 OPEN_CMD = +0.05   # keep within RescaleAction [-0.05, 0.05]
 CLOSE_CMD = -0.05
-XY_TOL = 0.02      # 2 cm lateral tolerance
-Z_TOL = 0.015      # 1.5 cm vertical tolerance
+XY_TOL = 0.03      # 3 cm lateral tolerance
+Z_TOL = 0.02       # 2 cm vertical tolerance
 
 
 def make_env():
@@ -102,14 +102,15 @@ def main():
     print(f"Initial TCP position: {tcp()}")
     print("=" * 80)
 
-    # Debug: wait a moment to see initial state
-    for _ in range(10):
-        obs, _, _, _, _ = env.step(np.array([0, 0, 0, OPEN_CMD], dtype=np.float32))
+    # Debug: wait a moment to see initial state (don't send any actions, let physics settle)
+    for _ in range(30):
+        # Send zero action to let physics settle without moving the robot
+        obs, _, _, _, _ = env.step(env.action_space.sample() * 0)  # Zero action
         try:
             env.render()
         except (AttributeError, Exception):
             pass
-        time.sleep(dt)
+        time.sleep(dt / 10)  # Fast forward through stabilization
 
     print(f"After stabilization:")
     print(f"  Banana: {banana()}")

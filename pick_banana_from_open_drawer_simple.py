@@ -160,19 +160,6 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             self.cabinet_zs.append(-collision_mesh.bounding_box.bounds[0, 2])
         self.cabinet_zs = common.to_tensor(self.cabinet_zs, device=self.device)
 
-        # Find the drawer joint index - needs to be done after reconfigure when joints are available
-        # Look for the prismatic joint (drawer slides in/out)
-        self.drawer_joint_idx = None
-        for i, joint in enumerate(self._cabinets[0].joints):
-            if joint.type[0] == "prismatic":
-                self.drawer_joint_idx = i
-                break
-
-        # Get drawer joint limits
-        target_qlimits = self.handle_link.joint.limits  # [b, 1, 2]
-        qmin, qmax = target_qlimits[..., 0], target_qlimits[..., 1]
-        self.drawer_open_qpos = qmin + (qmax - qmin) * self.drawer_open_frac
-
     # --- Episode initialization ---
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):
@@ -188,10 +175,15 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             self.cabinet.set_pose(Pose.create_from_pq(p=xy))
 
             # Open the drawer to the target position
+            # Get joint limits [b, num_joints, 2] where [:,:,0] is min and [:,:,1] is max
             qlimits = self.cabinet.get_qlimits()
-            qpos = qlimits[env_idx, :, 0].clone()
-            if self.drawer_joint_idx is not None:
-                qpos[:, self.drawer_joint_idx] = self.drawer_open_qpos[env_idx].squeeze()
+            qmin = qlimits[env_idx, :, 0]
+            qmax = qlimits[env_idx, :, 1]
+
+            # Set drawer to 80% open (interpolate between min and max)
+            # This opens all prismatic/revolute joints by 80%
+            qpos = qmin + (qmax - qmin) * self.drawer_open_frac
+
             self.cabinet.set_qpos(qpos)
             self.cabinet.set_qvel(self.cabinet.qpos[env_idx] * 0)
 

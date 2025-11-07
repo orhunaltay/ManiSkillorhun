@@ -152,6 +152,14 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             device=self.device,
         )
 
+        # Store the drawer joint index for later use
+        # Find which joint index corresponds to the drawer (prismatic joint)
+        self.drawer_joint_idx = None
+        for i, joint in enumerate(self.cabinet.joints):
+            if joint.type[0] == "prismatic":
+                self.drawer_joint_idx = i
+                break
+
     def _after_reconfigure(self, options):
         """Setup after GPU initialization"""
         self.cabinet_zs = []
@@ -182,7 +190,8 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
             # Open the drawer to the target position
             qlimits = self.cabinet.get_qlimits()
             qpos = qlimits[env_idx, :, 0].clone()
-            qpos[:, self.handle_link.joint.active_joint_idx[0]] = self.drawer_open_qpos[env_idx].squeeze()
+            if self.drawer_joint_idx is not None:
+                qpos[:, self.drawer_joint_idx] = self.drawer_open_qpos[env_idx].squeeze()
             self.cabinet.set_qpos(qpos)
             self.cabinet.set_qvel(self.cabinet.qpos[env_idx] * 0)
 

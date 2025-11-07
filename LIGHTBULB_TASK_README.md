@@ -2,6 +2,19 @@
 
 A ManiSkill manipulation task where a robotic arm must pick up a lightbulb and insert it into a socket fixture.
 
+## Quick Start
+
+**First time setup? See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions!**
+
+```bash
+# Install ManiSkill
+cd /path/to/ManiSkill
+pip install -e .
+
+# Run the demo
+python lightbulb_motion_planning.py
+```
+
 ## Overview
 
 This task demonstrates:

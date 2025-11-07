@@ -169,12 +169,13 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):
             b = len(env_idx)
-            self.table_scene.initialize(env_idx, table_z_rotation_angle=np.pi)
+            self.table_scene.initialize(env_idx)
 
             # Position cabinet on table (fixed position for scripted execution)
+            # Cabinet placed on the side of the table for easy access
             xy = torch.zeros((b, 3))
-            xy[:, 0] = 0.20  # 20cm in front
-            xy[:, 1] = 0.00  # centered
+            xy[:, 0] = 0.10  # 10cm from robot
+            xy[:, 1] = 0.25  # To the side
             xy[:, 2] = self.cabinet_zs[env_idx]
             self.cabinet.set_pose(Pose.create_from_pq(p=xy))
 
@@ -193,18 +194,20 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
                 self.scene._gpu_fetch_all()
 
             # Place banana inside the drawer (fixed position for scripted execution)
+            # Banana position relative to cabinet
             banana_pos = torch.zeros((b, 3))
-            banana_pos[:, 0] = 0.15  # Inside drawer
-            banana_pos[:, 1] = 0.00  # Centered
-            banana_pos[:, 2] = 0.04  # On drawer bottom
+            banana_pos[:, 0] = 0.05   # In front, inside drawer
+            banana_pos[:, 1] = 0.25   # Same Y as cabinet
+            banana_pos[:, 2] = 0.06   # On drawer bottom, slightly elevated
             q = [1, 0, 0, 0]
             self.banana.set_pose(Pose.create_from_pq(p=banana_pos, q=q))
 
             # Set goal position (fixed for scripted execution)
+            # Goal position: on the table, away from drawer
             goal_pos = torch.zeros((b, 3))
-            goal_pos[:, 0] = -0.20  # Behind robot
-            goal_pos[:, 1] = 0.20   # To the side
-            goal_pos[:, 2] = 0.15   # Elevated
+            goal_pos[:, 0] = 0.10    # Same X as cabinet
+            goal_pos[:, 1] = -0.20   # Opposite side of table
+            goal_pos[:, 2] = 0.10    # On table surface
             self.goal_site.set_pose(Pose.create_from_pq(p=goal_pos, q=q))
 
     def _after_control_step(self):

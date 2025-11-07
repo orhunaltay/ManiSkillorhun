@@ -26,16 +26,16 @@ import pick_banana_from_open_drawer_simple  # registers PickBananaFromOpenDrawer
 from gymnasium.wrappers import ClipAction, RescaleAction
 
 # --- Tunables ---
-HOVER_Z = 0.20   # hover height above table (z=0)
-GRASP_Z = 0.04   # touch banana height (matches spawn in drawer)
-PLACE_Z = 0.15   # place height at goal (matches goal z)
+HOVER_Z = 0.25   # hover height above table (z=0)
+GRASP_Z = 0.06   # touch banana height (matches spawn in drawer)
+PLACE_Z = 0.10   # place height at goal (matches goal z)
 STEP_XYZ = 0.01  # 1 cm per step
 FPS = 60.0
 HOLD_STEPS = 30
 OPEN_CMD = +0.05   # keep within RescaleAction [-0.05, 0.05]
 CLOSE_CMD = -0.05
-XY_TOL = 0.015     # 1.5 cm lateral tolerance
-Z_TOL = 0.01       # 1 cm vertical tolerance
+XY_TOL = 0.02      # 2 cm lateral tolerance
+Z_TOL = 0.015      # 1.5 cm vertical tolerance
 
 
 def make_env():

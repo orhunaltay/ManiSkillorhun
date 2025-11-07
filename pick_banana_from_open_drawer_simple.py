@@ -165,20 +165,24 @@ class PickBananaFromOpenDrawerSimpleEnv(BaseEnv):
         with torch.device(self.device):
             b = len(env_idx)
 
-            # Initialize robot with a good starting pose closer to the banana
+            # Initialize table scene with default robot pose
+            self.table_scene.initialize(env_idx)
+
+            # Set robot to a good starting pose closer to the banana
             # qpos for panda: 7 arm joints + 2 gripper joints
-            qpos_0 = np.array([
-                0.0,      # Joint 1
-                -0.785,   # Joint 2 (slight down angle)
-                0.0,      # Joint 3
-                -2.356,   # Joint 4 (elbow bent)
-                0.0,      # Joint 5
-                1.571,    # Joint 6 (wrist up)
-                0.785,    # Joint 7 (wrist rotate)
-                0.04,     # Gripper finger 1 (open)
-                0.04,     # Gripper finger 2 (open)
-            ])
-            self.table_scene.initialize(env_idx, qpos_0=qpos_0)
+            qpos_0 = torch.tensor([
+                [0.0,      # Joint 1
+                 -0.785,   # Joint 2 (slight down angle)
+                 0.0,      # Joint 3
+                 -2.356,   # Joint 4 (elbow bent)
+                 0.0,      # Joint 5
+                 1.571,    # Joint 6 (wrist up)
+                 0.785,    # Joint 7 (wrist rotate)
+                 0.04,     # Gripper finger 1 (open)
+                 0.04]     # Gripper finger 2 (open)
+            ], device=self.device, dtype=torch.float32).repeat(b, 1)
+            self.agent.robot.set_qpos(qpos_0)
+            self.agent.robot.set_qvel(qpos_0 * 0)
 
             # Position cabinet on table (fixed position for scripted execution)
             # Cabinet placed on the side of the table for easy access
